@@ -1,4 +1,5 @@
 import React from 'react'
+import { ReactComponent as Preloader } from './ball-triangle.svg'
 import { componentFromStream } from 'recompose'
 import {
   debounceTime,
@@ -6,9 +7,10 @@ import {
   map,
   switchMap,
   pluck,
-  catchError
+  catchError,
+  delay
 } from 'rxjs/operators'
-import { of } from 'rxjs'
+import { of, merge } from 'rxjs'
 
 import { ajax } from 'rxjs/ajax'
 import UserComponent from './UserComponent'
@@ -19,6 +21,12 @@ import './User.css'
 const formatUrl = user => `https://api.github.com/users/${user}`
 
 const User = componentFromStream(prop$ => {
+  const loading$ = of(
+    <div className={'loading'}>
+      <Preloader />
+    </div>
+  )
+
   const getUser$ = prop$.pipe(
     debounceTime(1000),
     // pluck expects prop.user at some point. pluck grabs user,
@@ -33,12 +41,22 @@ const User = componentFromStream(prop$ => {
     switchMap will cancel that previous fetch and focus on the current one. 
     */
     switchMap(url =>
-      ajax(url).pipe(
-        pluck('response'),
-        map(UserComponent),
-        //componentFromStream callback must return an observable.
-        //We can achieve that with "of"
-        catchError(error => of(<Error {...error} />))
+      //Turn multiple observables into a single observable.
+      //merge(input: Observable): Observable
+      merge(
+        loading$,
+        ajax(url).pipe(
+          //pluck(properties: ...args): Observable
+          //Select properties to emit.
+          pluck('response'),
+          delay(1500),
+          map(UserComponent),
+          //componentFromStream callback must return an observable.
+          //We can achieve that with 'of'
+          //'Of' emits variable amount of values in a sequence and then emits a complete notification.
+          //of(...values, scheduler: Scheduler): Observable
+          catchError(error => of(<Error {...error} />))
+        )
       )
     )
   )
